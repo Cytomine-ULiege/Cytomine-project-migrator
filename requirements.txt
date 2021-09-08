@@ -8,7 +8,7 @@ joblib==0.13.2
 msgpack==0.6.1
 numpy==1.16.2
 opencv-python-headless==4.0.0.21
-Pillow==5.4.1
+Pillow==8.3.2
 requests==2.21.0
 requests-toolbelt==0.9.1
 Shapely==1.7a1
