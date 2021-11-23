@@ -29,13 +29,13 @@ If an image with the same filename and dimensions already exists in the destinat
 
 From the command line:
 ```bash
-python export.py --host CYTOMINE_HOST --public_key PUB_KEY --private_key PRIV_KEY --id_project ID --working_path /home
+python exporter.py --host CYTOMINE_HOST --public_key PUB_KEY --private_key PRIV_KEY --id_project ID --working_path /home
 ```
 
 ### Import a project
 From the command line:
 ```bash
-python import.py --host CYTOMINE_HOST --public_key PUB_KEY --private_key PRIV_KEY --project_path /home/MY_PROJECT.tar.gz
+python importer.py --host CYTOMINE_HOST --public_key PUB_KEY --private_key PRIV_KEY --project_path /home/MY_PROJECT.tar.gz
 ```
 
 ## References
