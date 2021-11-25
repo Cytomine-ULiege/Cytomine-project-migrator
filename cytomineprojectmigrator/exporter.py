@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# * Copyright (c) 2009-2019. Authors: see NOTICE file.
+# * Copyright (c) 2009-2021. Authors: see NOTICE file.
 # *
 # * Licensed under the Apache License, Version 2.0 (the "License");
 # * you may not use this file except in compliance with the License.
@@ -27,11 +27,13 @@ from argparse import ArgumentParser
 from datetime import datetime
 
 from cytomine import Cytomine
-from cytomine.models import Project, Model, Collection, Ontology, TermCollection, ImageInstanceCollection, \
-    AnnotationCollection, UserCollection, User, PropertyCollection, \
-    AttachedFileCollection, Description, ImageGroupCollection, ImageSequenceCollection
+from cytomine.models import (
+    AnnotationCollection, AttachedFileCollection, Collection, Description,
+    ImageInstanceCollection, ImageGroupCollection,
+    ImageGroupImageInstanceCollection, Model, Ontology, Project,
+    PropertyCollection, TermCollection, User, UserCollection
+)
 from joblib import Parallel, delayed
-
 
 __author__ = "Rubens Ulysse <urubens@uliege.be>"
 
@@ -160,7 +162,12 @@ class Exporter:
             self.save_user(user, "userannotation_creator")
 
         logging.info("4.2/ Export user annotation term creator users")
-        annotation_users = set([annotation.userTerm for annotation in user_annotations if annotation.userTerm])
+        annotation_users = set()
+        for annotation in user_annotations:
+            annotation_users = annotation_users.union(*[
+                set(item['user']) for item in annotation.userByTerm if annotation.userByTerm
+            ])
+
         for annotation_user in annotation_users:
             user = User().fetch(annotation_user)
             self.save_user(user, "userannotationterm_creator")
@@ -173,10 +180,10 @@ class Exporter:
         logging.info("5/ Export users")
         if self.anonymize:
             for i, user in enumerate(self.users):
-                        user.username = "anonymized_user{}".format(i + 1)
-                        user.firstname = "Anonymized"
-                        user.lastname = "User {}".format(i + 1)
-                        user.email = "anonymous{}@unknown.com".format(i + 1)
+                user.username = "anonymized_user{}".format(i + 1)
+                user.firstname = "Anonymized"
+                user.lastname = "User {}".format(i + 1)
+                user.email = "anonymous{}@unknown.com".format(i + 1)
 
         self.save_object(self.users)
 
@@ -201,9 +208,9 @@ class Exporter:
                 for image_group in image_groups:
                     image_group.download(os.path.join(image_group_path, image_group.name), override=False, parent=True)
 
-            image_sequences = ImageSequenceCollection()
+            image_sequences = ImageGroupImageInstanceCollection()
             for image_group in image_groups:
-                image_sequences += ImageSequenceCollection().fetch_with_filter("imagegroup", image_group.id)
+                image_sequences += ImageGroupImageInstanceCollection().fetch_with_filter("imagegroup", image_group.id)
             self.save_object(image_sequences)
 
         # --------------------------------------------------------------------------------------------------------------
@@ -225,8 +232,9 @@ class Exporter:
             if description:
                 save_object_fn(description, "description-object-{}".format(obj.id))
 
-        Parallel(n_jobs=-1, backend="threading")(delayed(_export_metadata)(self.save_object, obj, self.attached_file_path)
-                                                 for obj in objects)
+        Parallel(n_jobs=-1, backend="threading")(
+            delayed(_export_metadata)(self.save_object, obj, self.attached_file_path) for obj in objects
+        )
 
     def save_user(self, user, role=None):
         u = find_or_append_by_id(user, self.users)
@@ -277,7 +285,7 @@ if __name__ == '__main__':
 
     with Cytomine(params.host, params.public_key, params.private_key) as _:
         Cytomine.get_instance().open_admin_session()
-        options = {k:v for (k,v) in vars(params).items() if k.startswith('without') or k == 'anonymize'}
+        options = {k: v for (k, v) in vars(params).items() if k.startswith('without') or k == 'anonymize'}
         exporter = Exporter(params.working_path, params.id_project, **options)
         exporter.run()
         if params.make_archive:
