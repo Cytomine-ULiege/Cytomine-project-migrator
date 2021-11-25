@@ -163,7 +163,7 @@ class Exporter:
 
         logging.info("4.2/ Export user annotation term creator users")
         annotation_users = set([
-            annotation.userByTerm[0]['user'].pop() for annotation in user_annotations
+            annotation.userByTerm[0]['user'].pop() for annotation in user_annotations if annotation.userByTerm
         ])
         for annotation_user in annotation_users:
             user = User().fetch(annotation_user)
