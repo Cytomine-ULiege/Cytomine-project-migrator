@@ -1,4 +1,4 @@
-"""Init file
+"""Version file
 
    Copyright (c) 2018-2023. Authors: see NOTICE file.
 
@@ -15,18 +15,11 @@
    limitations under the License.
 """
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-from __future__ import unicode_literals
-
-from .__version__ import (
-    __author__,
-    __author_email__,
-    __copyright__,
-    __description__,
-    __license__,
-    __title__,
-    __url__,
-    __version__,
-)
+__title__ = "cytomineprojectmigrator"
+__description__ = "Cytomine Project Migrator"
+__url__ = "https://doc.uliege.cytomine.org"
+__version__ = "0.0.0"
+__author__ = "Ulysse Rubens"
+__author_email__ = "uliege@cytomine.org"
+__license__ = "Apache 2.0"
+__copyright__ = "Copyright 2018-2023 ULiège Cytomine R&D team"
