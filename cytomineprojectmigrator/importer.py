@@ -425,6 +425,7 @@ class Importer:
 
             annotation = copy.copy(remote_annotation)
             annotation.id = None
+            annotation.slice = None
             annotation.project = id_mapping[remote_annotation.project]
             annotation.image = id_mapping[remote_annotation.image]
             annotation.user = id_mapping[remote_annotation.user]
