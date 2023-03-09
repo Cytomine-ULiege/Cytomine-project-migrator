@@ -464,6 +464,7 @@ class Importer:
                 open(os.path.join(self.working_path, property_json))
             ):
                 prop = Property(obj).populate(remote_prop)
+                prop.id = None
                 prop.domainIdent = self.id_mapping[prop.domainIdent]
                 prop.save()
 
@@ -479,7 +480,7 @@ class Importer:
                 af = AttachedFile(obj).populate(remote_af)
                 af.domainIdent = self.id_mapping[af.domainIdent]
                 af.filename = os.path.join(
-                    self.working_path, "attached_files", remote_af.filename
+                    self.working_path, "attached_files", remote_af.get("filename")
                 )
                 af.save()
 
