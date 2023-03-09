@@ -67,7 +67,7 @@ def find_first(l):
 
 
 def random_string(length=10):
-    return ''.join(random.choice(string.ascii_letters) for _ in range(length))
+    return "".join(random.choice(string.ascii_letters) for _ in range(length))
 
 
 def connect_as(user=None, open_admin_session=False):
@@ -108,25 +108,21 @@ class Importer:
         connect_as(self.super_admin, True)
 
         users = UserCollection().fetch()
-        users_json = [f for f in os.listdir(self.working_path) if f.endswith(".json") and f.startswith("user-collection")][0]
+        users_json = [
+            f
+            for f in os.listdir(self.working_path)
+            if f.endswith(".json") and f.startswith("user-collection")
+        ][0]
         remote_users = UserCollection()
-        for u in json.load(open(os.path.join(self.working_path, users_json))):
-            remote_users.append(User().populate(u))
-
-        roles = ["project_manager", "project_contributor", "ontology_creator"]
-        if self.with_images:
-            roles += ["image_creator", "image_reviewer"]
-
-        if self.with_userannotations:
-            roles += ["userannotation_creator", "userannotationterm_creator"]
-
-        roles = set(roles)
-        remote_users = [u for u in remote_users if len(roles.intersection(set(u.roles))) > 0]
+        with open(os.path.join(self.working_path, users_json), "r") as fp:
+            for user in json.load(fp):
+                remote_users.append(User().populate(user))
 
         for remote_user in remote_users:
             user = find_first([u for u in users if u.username == remote_user.username])
             if not user:
                 user = copy.copy(remote_user)
+                user.id = None
                 if not user.password:
                     user.password = random_string(8)
                 if not self.with_original_date:
@@ -143,22 +139,40 @@ class Importer:
         Otherwise, an ontology with an available name is created with new terms and corresponding relationships.
         """
         ontologies = OntologyCollection().fetch()
-        ontology_json = [f for f in os.listdir(self.working_path) if f.endswith(".json") and f.startswith("ontology")][0]
-        remote_ontology = Ontology().populate(json.load(open(os.path.join(self.working_path, ontology_json))))
+        ontology_json = [
+            f
+            for f in os.listdir(self.working_path)
+            if f.endswith(".json") and f.startswith("ontology")
+        ][0]
+        remote_ontology = Ontology().populate(
+            json.load(open(os.path.join(self.working_path, ontology_json)))
+        )
         remote_ontology.name = remote_ontology.name.strip()
 
         terms = TermCollection().fetch()
-        terms_json = [f for f in os.listdir(self.working_path) if f.endswith(".json") and f.startswith("term-collection")]
+        terms_json = [
+            f
+            for f in os.listdir(self.working_path)
+            if f.endswith(".json") and f.startswith("term-collection")
+        ]
         remote_terms = TermCollection()
         if len(terms_json) > 0:
             for t in json.load(open(os.path.join(self.working_path, terms_json[0]))):
                 remote_terms.append(Term().populate(t))
 
         def ontology_exists():
-            compatible_ontology = find_first([o for o in ontologies if o.name == remote_ontology.name.strip()])
+            compatible_ontology = find_first(
+                [o for o in ontologies if o.name == remote_ontology.name.strip()]
+            )
             if compatible_ontology:
-                set1 = set((t.name, t.color) for t in terms if t.ontology == compatible_ontology.id)
-                difference = [term for term in remote_terms if (term.name, term.color) not in set1]
+                set1 = set(
+                    (t.name, t.color)
+                    for t in terms
+                    if t.ontology == compatible_ontology.id
+                )
+                difference = [
+                    term for term in remote_terms if (term.name, term.color) not in set1
+                ]
                 if len(difference) == 0:
                     return True, compatible_ontology
                 return False, None
@@ -177,6 +191,7 @@ class Importer:
         connect_as(User().fetch(self.id_mapping[remote_ontology.user]))
         if not existing_ontology:
             ontology = copy.copy(remote_ontology)
+            ontology.id = None
             ontology.user = self.id_mapping[remote_ontology.user]
             if not self.with_original_date:
                 ontology.created = None
@@ -188,6 +203,7 @@ class Importer:
             for remote_term in remote_terms:
                 logging.info("Importing term: {}".format(remote_term))
                 term = copy.copy(remote_term)
+                term.id = None
                 term.ontology = self.id_mapping[term.ontology]
                 term.parent = None
                 if not self.with_original_date:
@@ -201,14 +217,18 @@ class Importer:
             for relation in remote_relation_terms:
                 parent, child = relation
                 if parent:
-                    rt = RelationTerm(self.id_mapping[parent], self.id_mapping[child]).save()
+                    rt = RelationTerm(
+                        self.id_mapping[parent], self.id_mapping[child]
+                    ).save()
                     logging.info("Relation term imported: {}".format(rt))
         else:
             self.id_mapping[remote_ontology.id] = existing_ontology.id
 
             ontology_terms = [t for t in terms if t.ontology == existing_ontology.id]
             for remote_term in remote_terms:
-                self.id_mapping[remote_term.id] = find_first([t for t in ontology_terms if t.name == remote_term.name]).id
+                self.id_mapping[remote_term.id] = find_first(
+                    [t for t in ontology_terms if t.name == remote_term.name]
+                ).id
 
             logging.info("Ontology already encoded: {}".format(existing_ontology))
 
@@ -222,8 +242,14 @@ class Importer:
         If a project with the same name already exists, append a (x) suffix where x is an increasing number.
         """
         projects = ProjectCollection().fetch()
-        project_json = [f for f in os.listdir(self.working_path) if f.endswith(".json") and f.startswith("project")][0]
-        remote_project = Project().populate(json.load(open(os.path.join(self.working_path, project_json))))
+        project_json = [
+            f
+            for f in os.listdir(self.working_path)
+            if f.endswith(".json") and f.startswith("project")
+        ][0]
+        remote_project = Project().populate(
+            json.load(open(os.path.join(self.working_path, project_json)))
+        )
         remote_project.name = remote_project.name.strip()
 
         def available_name():
@@ -236,10 +262,13 @@ class Importer:
             return new_name
 
         project = copy.copy(remote_project)
+        project.id = None
         project.name = available_name()
         project.discipline = None
         project.ontology = self.id_mapping[project.ontology]
-        project_contributors = [u for u in remote_users if "project_contributor" in u.roles]
+        project_contributors = [
+            u for u in remote_users if "project_contributor" in u.roles
+        ]
         project.users = [self.id_mapping[u.id] for u in project_contributors]
         project_managers = [u for u in remote_users if "project_manager" in u.roles]
         project.admins = [self.id_mapping[u.id] for u in project_managers]
@@ -254,7 +283,11 @@ class Importer:
         logging.info("3/ Import images")
         storages = StorageCollection().fetch()
         abstract_images = AbstractImageCollection().fetch()
-        images_json = [f for f in os.listdir(self.working_path) if f.endswith(".json") and f.startswith("imageinstance-collection")]
+        images_json = [
+            f
+            for f in os.listdir(self.working_path)
+            if f.endswith(".json") and f.startswith("imageinstance-collection")
+        ]
         remote_images = ImageInstanceCollection()
         if len(images_json) > 0:
             for i in json.load(open(os.path.join(self.working_path, images_json[0]))):
@@ -266,7 +299,9 @@ class Importer:
             image = copy.copy(remote_image)
 
             # Fix old image name due to urllib3 limitation
-            remote_image.originalFilename = bytes(remote_image.originalFilename, 'utf-8').decode('ascii', 'ignore')
+            remote_image.originalFilename = bytes(
+                remote_image.originalFilename, "utf-8"
+            ).decode("ascii", "ignore")
             if remote_image.originalFilename not in remote_images_dict.keys():
                 remote_images_dict[remote_image.originalFilename] = [remote_image]
             else:
@@ -276,24 +311,46 @@ class Importer:
             # SWITCH user to image creator user
             connect_as(User().fetch(self.id_mapping[remote_image.user]))
             # Get its storage
-            storage = find_first([s for s in storages if s.user == Cytomine.get_instance().current_user.id])
+            storage = find_first(
+                [
+                    s
+                    for s in storages
+                    if s.user == Cytomine.get_instance().current_user.id
+                ]
+            )
             if not storage:
                 storage = storages[0]
 
             # Check if image is already in its storage
-            abstract_image = find_first([ai for ai in abstract_images
-                                         if ai.originalFilename == remote_image.originalFilename
-                                         and ai.width == remote_image.width
-                                         and ai.height == remote_image.height
-                                         and ai.resolution == remote_image.resolution])
+            abstract_image = find_first(
+                [
+                    ai
+                    for ai in abstract_images
+                    if ai.originalFilename == remote_image.originalFilename
+                    and ai.width == remote_image.width
+                    and ai.height == remote_image.height
+                ]
+            )
             if abstract_image:
-                logging.info("== Found corresponding abstract image. Linking to project.")
-                ImageInstance(abstract_image.id, self.id_mapping[remote_project.id]).save()
+                logging.info(
+                    "== Found corresponding abstract image. Linking to project."
+                )
+                ImageInstance(
+                    abstract_image.id, self.id_mapping[remote_project.id]
+                ).save()
             else:
                 logging.info("== New image starting to upload & deploy")
-                filename = os.path.join(self.working_path, "images", image.originalFilename.replace("/", "-"))
-                Cytomine.get_instance().upload_image(self.host_upload, filename, storage.id,
-                                                     self.id_mapping[remote_project.id])
+                filename = os.path.join(
+                    self.working_path,
+                    "images",
+                    image.originalFilename.replace("/", "-"),
+                )
+                Cytomine.get_instance().upload_image(
+                    self.host_upload,
+                    filename,
+                    storage.id,
+                    self.id_mapping[remote_project.id],
+                )
                 time.sleep(0.8)
 
             # SWITCH USER
@@ -304,7 +361,9 @@ class Importer:
         new_images = None
         count = 0
         while n_new_images != len(remote_images) and count < len(remote_images) * 5:
-            new_images = ImageInstanceCollection().fetch_with_filter("project", self.id_mapping[remote_project.id])
+            new_images = ImageInstanceCollection().fetch_with_filter(
+                "project", self.id_mapping[remote_project.id]
+            )
             n_new_images = len(new_images)
             if count > 0:
                 time.sleep(5)
@@ -317,9 +376,19 @@ class Importer:
             if self.with_original_date:
                 new_image.created = remote_image.created
                 new_image.updated = remote_image.updated
-            new_image.reviewStart = remote_image.reviewStart if hasattr(remote_image, 'reviewStart') else None
-            new_image.reviewStop = remote_image.reviewStop if hasattr(remote_image, 'reviewStop') else None
-            new_image.reviewUser = self.id_mapping[remote_image.reviewUser] if hasattr(remote_image, 'reviewUser') and remote_image.reviewUser else None
+            new_image.reviewStart = (
+                remote_image.reviewStart
+                if hasattr(remote_image, "reviewStart")
+                else None
+            )
+            new_image.reviewStop = (
+                remote_image.reviewStop if hasattr(remote_image, "reviewStop") else None
+            )
+            new_image.reviewUser = (
+                self.id_mapping[remote_image.reviewUser]
+                if hasattr(remote_image, "reviewUser") and remote_image.reviewUser
+                else None
+            )
             new_image.instanceFilename = remote_image.instanceFilename
             new_image.update()
             self.id_mapping[remote_image.id] = new_image.id
@@ -329,8 +398,6 @@ class Importer:
             if self.with_original_date:
                 new_abstract.created = remote_image.created
                 new_abstract.updated = remote_image.updated
-            if new_abstract.resolution is None:
-                new_abstract.resolution = remote_image.resolution
             if new_abstract.magnification is None:
                 new_abstract.magnification = remote_image.magnification
             new_abstract.update()
@@ -339,18 +406,25 @@ class Importer:
 
         # --------------------------------------------------------------------------------------------------------------
         logging.info("4/ Import user annotations")
-        annots_json = [f for f in os.listdir(self.working_path) if f.endswith(".json") and f.startswith("user-annotation-collection")]
+        annots_json = [
+            f
+            for f in os.listdir(self.working_path)
+            if f.endswith(".json") and f.startswith("user-annotation-collection")
+        ]
         remote_annots = AnnotationCollection()
         if len(annots_json) > 0:
             for a in json.load(open(os.path.join(self.working_path, annots_json[0]))):
                 remote_annots.append(Annotation().populate(a))
 
         def _add_annotation(remote_annotation, id_mapping, with_original_date):
-            if remote_annotation.project not in id_mapping.keys() \
-                    or remote_annotation.image not in id_mapping.keys():
+            if (
+                remote_annotation.project not in id_mapping.keys()
+                or remote_annotation.image not in id_mapping.keys()
+            ):
                 return
 
             annotation = copy.copy(remote_annotation)
+            annotation.id = None
             annotation.project = id_mapping[remote_annotation.project]
             annotation.image = id_mapping[remote_annotation.image]
             annotation.user = id_mapping[remote_annotation.user]
@@ -364,9 +438,12 @@ class Importer:
             remote_annots_for_user = [a for a in remote_annots if a.user == user.id]
             # SWITCH to annotation creator user
             connect_as(User().fetch(self.id_mapping[user.id]))
-            Parallel(n_jobs=-1, backend="threading")(delayed(_add_annotation)
-                                                     (remote_annotation, self.id_mapping, self.with_original_date)
-                                                     for remote_annotation in remote_annots_for_user)
+            Parallel(n_jobs=-1, backend="threading")(
+                delayed(_add_annotation)(
+                    remote_annotation, self.id_mapping, self.with_original_date
+                )
+                for remote_annotation in remote_annots_for_user
+            )
 
             # SWITCH back to admin
             connect_as(self.super_admin, True)
@@ -377,51 +454,88 @@ class Importer:
         obj.id = -1
         obj.class_ = ""
 
-        properties_json = [f for f in os.listdir(self.working_path) if
-                       f.endswith(".json") and f.startswith("properties")]
+        properties_json = [
+            f
+            for f in os.listdir(self.working_path)
+            if f.endswith(".json") and f.startswith("properties")
+        ]
         for property_json in properties_json:
-            for remote_prop in json.load(open(os.path.join(self.working_path, property_json))):
+            for remote_prop in json.load(
+                open(os.path.join(self.working_path, property_json))
+            ):
                 prop = Property(obj).populate(remote_prop)
                 prop.domainIdent = self.id_mapping[prop.domainIdent]
                 prop.save()
 
-        attached_files_json = [f for f in os.listdir(self.working_path) if
-                       f.endswith(".json") and f.startswith("attached-files")]
+        attached_files_json = [
+            f
+            for f in os.listdir(self.working_path)
+            if f.endswith(".json") and f.startswith("attached-files")
+        ]
         for attached_file_json in attached_files_json:
-            for remote_af in json.load(open(os.path.join(self.working_path, attached_file_json))):
+            for remote_af in json.load(
+                open(os.path.join(self.working_path, attached_file_json))
+            ):
                 af = AttachedFile(obj).populate(remote_af)
                 af.domainIdent = self.id_mapping[af.domainIdent]
-                af.filename = os.path.join(self.working_path, "attached_files", remote_af.filename)
+                af.filename = os.path.join(
+                    self.working_path, "attached_files", remote_af.filename
+                )
                 af.save()
 
-        descriptions_json = [f for f in os.listdir(self.working_path) if f.endswith(".json") and f.startswith("description")]
+        descriptions_json = [
+            f
+            for f in os.listdir(self.working_path)
+            if f.endswith(".json") and f.startswith("description")
+        ]
         for description_json in descriptions_json:
-            desc = Description(obj).populate(json.load(open(os.path.join(self.working_path, description_json))))
+            desc = Description(obj).populate(
+                json.load(open(os.path.join(self.working_path, description_json)))
+            )
+            desc.id = None
             desc.domainIdent = self.id_mapping[desc.domainIdent]
             desc._object.class_ = desc.domainClassName
             desc._object.id = desc.domainIdent
             desc.save()
 
 
-if __name__ == '__main__':
-    parser = ArgumentParser(prog="Cytomine Project Importer")
-    parser.add_argument('--host', help="The Cytomine host on which project is imported.")
-    parser.add_argument('--host_upload', help="The Cytomine host on which images are uploaded.")
-    parser.add_argument('--public_key', help="The Cytomine public key used to import the project. "
-                                             "The underlying user has to be a Cytomine administrator.")
-    parser.add_argument('--private_key', help="The Cytomine private key used to import the project. "
-                                              "The underlying user has to be a Cytomine administrator.")
-    parser.add_argument('--project_path', default="", help="The base path where the project archive is stored.")
-    # TODO: other options
-    params, other = parser.parse_known_args(sys.argv[1:])
+if __name__ == "__main__":
+    parser = ArgumentParser(description="Cytomine Project Importer")
+    parser.add_argument(
+        "--host", help="The Cytomine host on which project is imported."
+    )
+    parser.add_argument(
+        "--host_upload", help="The Cytomine host on which images are uploaded."
+    )
+    parser.add_argument(
+        "--public_key",
+        help="The Cytomine public key used to import the project. "
+        "The underlying user has to be a Cytomine administrator.",
+    )
+    parser.add_argument(
+        "--private_key",
+        help="The Cytomine private key used to import the project. "
+        "The underlying user has to be a Cytomine administrator.",
+    )
+    parser.add_argument(
+        "--project_path",
+        help="The base path where the project archive is stored.",
+    )
+    params, _ = parser.parse_known_args(sys.argv[1:])
 
     with Cytomine(params.host, params.public_key, params.private_key) as _:
-        options = {k:v for (k,v) in vars(params).items() if k.startswith('without')}
+        options = {k: v for (k, v) in vars(params).items() if k.startswith("without")}
 
-        if params.project_path.startswith("http://") or params.project_path.startswith("https://"):
+        if params.project_path.startswith("http://") or params.project_path.startswith(
+            "https://"
+        ):
             logging.info("Downloading from {}".format(params.project_path))
-            response = requests.get(params.project_path, allow_redirects=True, stream=True)
-            params.project_path = params.project_path[params.project_path.rfind("/") + 1 :]
+            response = requests.get(
+                params.project_path, allow_redirects=True, stream=True
+            )
+            params.project_path = params.project_path[
+                params.project_path.rfind("/") + 1 :
+            ]
             with open(params.project_path, "wb") as f:
                 shutil.copyfileobj(response.raw, f)
                 logging.info("Downloaded successfully.")
