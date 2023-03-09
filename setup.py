@@ -19,7 +19,7 @@ from setuptools import find_packages, setup
 
 REQUIRES_PYTHON = ">=3.8.0"
 REQUIRED = [
-    "joblib==1.1.0",
+    "joblib==1.2.0",
     "requests>=2.21.0",
     "cytomine-python-client>=2.8.3",
 ]
