@@ -412,8 +412,8 @@ if __name__ == "__main__":
     )
     params, other = parser.parse_known_args(sys.argv[1:])
 
-    with Cytomine(params.host, params.public_key, params.private_key) as _:
-        Cytomine.get_instance().open_admin_session()
+    with Cytomine(params.host, params.public_key, params.private_key) as cytomine:
+        cytomine.open_admin_session()
         options = {
             k: v
             for (k, v) in vars(params).items()
@@ -423,4 +423,4 @@ if __name__ == "__main__":
         exporter.run()
         if params.make_archive:
             exporter.make_archive()
-        Cytomine.get_instance().close_admin_session()
+        cytomine.close_admin_session()
