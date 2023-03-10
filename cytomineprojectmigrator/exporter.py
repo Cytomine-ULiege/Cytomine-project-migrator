@@ -220,10 +220,10 @@ class Exporter:
         logging.info("5/ Export users")
         if self.anonymize:
             for i, user in enumerate(self.users):
-                user.username = "anonymized_user{}".format(i + 1)
+                user.username = f"anonymized_user{i + 1}"
                 user.firstname = "Anonymized"
-                user.lastname = "User {}".format(i + 1)
-                user.email = "anonymous{}@unknown.com".format(i + 1)
+                user.lastname = f"User {i + 1}"
+                user.email = f"anonymous{i + 1}@unknown.com"
 
         self.save_object(self.users)
 
@@ -271,13 +271,13 @@ class Exporter:
             properties = PropertyCollection(obj).fetch()
             if len(properties) > 0:
                 save_object_fn(
-                    properties, "properties-object-{}-collection".format(obj.id)
+                    properties, f"properties-object-{obj.id}-collection"
                 )
 
             attached_files = AttachedFileCollection(obj).fetch()
             if len(attached_files) > 0:
                 save_object_fn(
-                    attached_files, "attached-files-object-{}-collection".format(obj.id)
+                    attached_files, f"attached-files-object-{obj.id}-collection"
                 )
                 for attached_file in attached_files:
                     attached_file.download(
@@ -286,7 +286,7 @@ class Exporter:
 
             description = Description(obj).fetch()
             if description:
-                save_object_fn(description, "description-object-{}".format(obj.id))
+                save_object_fn(description, f"description-object-{obj.id}")
 
         Parallel(n_jobs=-1, backend="threading")(
             delayed(_export_metadata)(self.save_object, obj, self.attached_file_path)
@@ -305,11 +305,11 @@ class Exporter:
             return
 
         if filename:
-            filename = "{}.json".format(filename)
+            filename = f"{filename}.json"
         elif isinstance(obj, Model):
-            filename = "{}-{}.json".format(obj.callback_identifier, obj.id)
+            filename = f"{obj.callback_identifier}-{obj.id}.json"
         elif isinstance(obj, Collection):
-            filename = "{}-collection.json".format(obj.callback_identifier)
+            filename = f"{obj.callback_identifier}-collection.json"
 
         with open(os.path.join(self.project_path, filename), "w") as outfile:
             outfile.write(obj.to_json())
