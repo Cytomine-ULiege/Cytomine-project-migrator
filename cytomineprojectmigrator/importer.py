@@ -143,36 +143,13 @@ class Importer:
 
         return mapping
 
-    def run(self):
-        self.super_admin = Cytomine.get_instance().current_user
-        connect_as(self.super_admin, True)
-
-        users = UserCollection().fetch()
-        self.remote_users = UserCollection()
-        with open(self.filenames[Models.USER], "r", encoding="utf-8") as file:
-            for user in json.load(file):
-                self.remote_users.append(User().populate(user))
-
-        for remote_user in self.remote_users:
-            user = find_first([u for u in users if u.username == remote_user.username])
-            if not user:
-                user = copy.copy(remote_user)
-                user.id = None
-                if not user.password:
-                    user.password = random_string(8)
-                if not self.with_original_date:
-                    user.created = None
-                    user.updated = None
-                user.save()
-            self.id_mapping[remote_user.id] = user.id
-
-        # --------------------------------------------------------------------------------------------------------------
-        logging.info("1/ Import ontology and terms")
+    def import_ontology(self):
         """
         Import the ontology with terms and relation terms that are stored in pickled files in working_path.
         If the ontology exists (same name and same terms), the existing one is used.
         Otherwise, an ontology with an available name is created with new terms and corresponding relationships.
         """
+
         ontologies = OntologyCollection().fetch()
         with open(self.filenames[Models.ONTOLOGY], "r", encoding="utf-8") as file:
             remote_ontology = Ontology().populate(json.load(file))
@@ -200,14 +177,14 @@ class Importer:
                 if len(difference) == 0:
                     return True, compatible_ontology
                 return False, None
-            else:
-                return True, None
+
+            return True, None
 
         i = 1
         remote_name = remote_ontology.name
         found, existing_ontology = ontology_exists()
         while not found:
-            remote_ontology.name = "{} ({})".format(remote_name, i)
+            remote_ontology.name = f"{remote_name} ({i})"
             found, existing_ontology = ontology_exists()
             i += 1
 
@@ -222,10 +199,10 @@ class Importer:
                 ontology.updated = None
             ontology.save()
             self.id_mapping[remote_ontology.id] = ontology.id
-            logging.info("Ontology imported: {}".format(ontology))
+            logging.info("Ontology imported: %s", ontology)
 
             for remote_term in remote_terms:
-                logging.info("Importing term: {}".format(remote_term))
+                logging.info("Importing term: %s", remote_term)
                 term = copy.copy(remote_term)
                 term.id = None
                 term.ontology = self.id_mapping[term.ontology]
@@ -235,7 +212,7 @@ class Importer:
                     term.updated = None
                 term.save()
                 self.id_mapping[remote_term.id] = term.id
-                logging.info("Term imported: {}".format(term))
+                logging.info("Term imported: %s", term)
 
             remote_relation_terms = [(term.parent, term.id) for term in remote_terms]
             for relation in remote_relation_terms:
@@ -244,7 +221,7 @@ class Importer:
                     rt = RelationTerm(
                         self.id_mapping[parent], self.id_mapping[child]
                     ).save()
-                    logging.info("Relation term imported: {}".format(rt))
+                    logging.info("Relation term imported: %s", rt)
         else:
             self.id_mapping[remote_ontology.id] = existing_ontology.id
 
@@ -254,13 +231,12 @@ class Importer:
                     [t for t in ontology_terms if t.name == remote_term.name]
                 ).id
 
-            logging.info("Ontology already encoded: {}".format(existing_ontology))
+            logging.info("Ontology already encoded: %s", existing_ontology)
 
         # SWITCH USER
         connect_as(self.super_admin, True)
 
-        # --------------------------------------------------------------------------------------------------------------
-        logging.info("2/ Import project")
+    def import_project(self):
         """
         Import the project (i.e. the Cytomine Project domain) stored in pickled file in working_path.
         If a project with the same name already exists, append a (x) suffix where x is an increasing number.
@@ -275,7 +251,7 @@ class Importer:
             existing_names = [o.name for o in projects]
             new_name = project.name
             while new_name in existing_names:
-                new_name = "{} ({})".format(project.name, i)
+                new_name = f"{project.name} ({i})"
                 i += 1
             return new_name
 
@@ -297,10 +273,11 @@ class Importer:
             project.updated = None
         project.save()
         self.id_mapping[self.remote_project.id] = project.id
-        logging.info("Project imported: {}".format(project))
+        logging.info("Project imported: %s", project)
 
-        # --------------------------------------------------------------------------------------------------------------
-        logging.info("3/ Import images")
+    def import_images(self):
+        """Import the images to the project"""
+
         storages = StorageCollection().fetch()
         abstract_images = AbstractImageCollection().fetch()
         remote_images = ImageInstanceCollection()
@@ -317,11 +294,11 @@ class Importer:
             remote_image.originalFilename = bytes(
                 remote_image.originalFilename, "utf-8"
             ).decode("ascii", "ignore")
-            if remote_image.originalFilename not in remote_images_dict.keys():
+            if remote_image.originalFilename not in remote_images_dict:
                 remote_images_dict[remote_image.originalFilename] = [remote_image]
             else:
                 remote_images_dict[remote_image.originalFilename].append(remote_image)
-            logging.info("Importing image: {}".format(remote_image))
+            logging.info("Importing image: %s", remote_image)
 
             # SWITCH user to image creator user
             connect_as(User().fetch(self.id_mapping[remote_image.user]))
@@ -419,8 +396,9 @@ class Importer:
 
         print("All image-instances have been fixed.")
 
-        # --------------------------------------------------------------------------------------------------------------
-        logging.info("4/ Import user annotations")
+    def import_annotations(self):
+        """Import the user annotations to the project"""
+
         remote_annots = AnnotationCollection()
         with open(
             self.filenames[Models.USER_ANNOTATION], "r", encoding="utf-8"
@@ -463,8 +441,9 @@ class Importer:
             # SWITCH back to admin
             connect_as(self.super_admin, True)
 
-        # --------------------------------------------------------------------------------------------------------------
-        logging.info("5/ Import metadata (properties, attached files, description)")
+    def import_metadata(self):
+        """Import the metadata related to the project, annotation, etc"""
+
         obj = Model()
         obj.id = -1
         obj.class_ = ""
@@ -496,6 +475,49 @@ class Importer:
                 desc._object.class_ = desc.domainClassName
                 desc._object.id = desc.domainIdent
                 desc.save()
+
+    def run(self):
+        """Import a Cytomine project"""
+
+        self.super_admin = Cytomine.get_instance().current_user
+        connect_as(self.super_admin, True)
+
+        users = UserCollection().fetch()
+        self.remote_users = UserCollection()
+        with open(self.filenames[Models.USER], "r", encoding="utf-8") as file:
+            for user in json.load(file):
+                self.remote_users.append(User().populate(user))
+
+        for remote_user in self.remote_users:
+            user = find_first([u for u in users if u.username == remote_user.username])
+            if not user:
+                user = copy.copy(remote_user)
+                user.id = None
+                if not user.password:
+                    user.password = random_string(8)
+                if not self.with_original_date:
+                    user.created = None
+                    user.updated = None
+                user.save()
+            self.id_mapping[remote_user.id] = user.id
+
+        logging.info("1/ Import ontology and terms")
+        self.import_ontology()
+
+        # SWITCH USER
+        connect_as(self.super_admin, True)
+
+        logging.info("2/ Import project")
+        self.import_project()
+
+        logging.info("3/ Import images")
+        self.import_images()
+
+        logging.info("4/ Import user annotations")
+        self.import_annotations()
+
+        logging.info("5/ Import metadata (properties, attached files, description)")
+        self.import_metadata()
 
 
 if __name__ == "__main__":
