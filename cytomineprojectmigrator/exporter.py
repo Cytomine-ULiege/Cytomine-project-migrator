@@ -80,8 +80,8 @@ class Exporter:
             self.project.name,
             datetime.now(),
         ]
-        self.project_directory = "{}-{}-{}-{}".format(
-            *[str(item).replace(" ", "-") for item in items]
+        self.project_directory = "-".join(
+            [str(item).replace(" ", "-") for item in items]
         )
         self.working_path = working_path
         self.project_path = os.path.join(working_path, self.project_directory)
@@ -97,7 +97,7 @@ class Exporter:
         self.users = UserCollection()
 
     def run(self):
-        logging.info("Export will be done in directory {}".format(self.project_path))
+        logging.info("Export will be done in directory %s", self.project_path)
         os.makedirs(self.project_path)
 
         if self.with_metadata or self.with_annotation_metadata:
@@ -105,7 +105,7 @@ class Exporter:
             os.makedirs(self.attached_file_path)
 
         # --------------------------------------------------------------------------------------------------------------
-        logging.info("1/ Export project {}".format(self.project.id))
+        logging.info("1/ Export project %s", self.project.id)
         self.save_object(self.project)
 
         logging.info("1.1/ Export project managers")
@@ -125,7 +125,7 @@ class Exporter:
             self.export_metadata([self.project])
 
         # --------------------------------------------------------------------------------------------------------------
-        logging.info("2/ Export ontology {}".format(self.project.ontology))
+        logging.info("2/ Export ontology %s", self.project.ontology)
         ontology = Ontology().fetch(self.project.ontology)
         self.save_object(ontology)
 
@@ -156,7 +156,7 @@ class Exporter:
             os.makedirs(image_path)
 
             def _download_image(image, path):
-                logging.info("Download file for image {}".format(image))
+                logging.info("Download file for image %s", image)
                 image.download(
                     os.path.join(path, image.originalFilename),
                     override=False,
@@ -313,7 +313,7 @@ class Exporter:
 
         with open(os.path.join(self.project_path, filename), "w") as outfile:
             outfile.write(obj.to_json())
-            logging.info("Object {} has been saved locally.".format(obj))
+            logging.info("Object %s has been saved locally.", obj)
 
     def make_archive(self):
         logging.info("Making archive...")
