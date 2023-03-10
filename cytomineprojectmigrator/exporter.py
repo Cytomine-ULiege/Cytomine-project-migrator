@@ -50,15 +50,18 @@ __author__ = "Rubens Ulysse <urubens@uliege.be>"
 
 
 def find_or_append_by_id(obj, l):
+    """Find obj in a list if not found add it to the list"""
     items = [i for i in l if i.id == obj.id]
     if items and len(items) > 0:
         return items[0]
-    else:
-        l.append(obj)
-        return obj
+
+    l.append(obj)
+    return obj
 
 
 class Exporter:
+    """Export a Cytomine Project as an archive from a Cytomine server"""
+
     def __init__(
         self,
         working_path,
@@ -97,6 +100,8 @@ class Exporter:
         self.users = UserCollection()
 
     def run(self):
+        """Export a Cytomine project"""
+
         logging.info("Export will be done in directory %s", self.project_path)
         os.makedirs(self.project_path)
 
@@ -267,12 +272,12 @@ class Exporter:
         logging.info("Finished.")
 
     def export_metadata(self, objects):
+        """Export the medata"""
+
         def _export_metadata(save_object_fn, obj, attached_file_path):
             properties = PropertyCollection(obj).fetch()
             if len(properties) > 0:
-                save_object_fn(
-                    properties, f"properties-object-{obj.id}-collection"
-                )
+                save_object_fn(properties, f"properties-object-{obj.id}-collection")
 
             attached_files = AttachedFileCollection(obj).fetch()
             if len(attached_files) > 0:
@@ -294,6 +299,8 @@ class Exporter:
         )
 
     def save_user(self, user, role=None):
+        """Save the user of the project"""
+
         u = find_or_append_by_id(user, self.users)
         if not hasattr(u, "roles"):
             u.roles = []
@@ -301,6 +308,8 @@ class Exporter:
             u.roles.append(role)
 
     def save_object(self, obj, filename=None):
+        """Save the object"""
+
         if not obj:
             return
 
@@ -316,6 +325,8 @@ class Exporter:
             logging.info("Object %s has been saved locally.", obj)
 
     def make_archive(self):
+        """Create an archive of the project"""
+
         logging.info("Making archive...")
         shutil.make_archive(
             self.project_path, "gztar", self.working_path, self.project_directory
