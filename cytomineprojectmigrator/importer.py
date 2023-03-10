@@ -406,6 +406,9 @@ class Importer:
     def import_annotations(self):
         """Import the user annotations to the project"""
 
+        if not self.filenames[Models.USER_ANNOTATION]:
+            return
+
         remote_annots = AnnotationCollection()
         with open(
             self.filenames[Models.USER_ANNOTATION], "r", encoding="utf-8"
