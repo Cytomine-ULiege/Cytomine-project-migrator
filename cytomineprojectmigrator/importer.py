@@ -33,6 +33,7 @@ import tarfile
 import time
 
 from argparse import ArgumentParser
+from enum import Enum
 from joblib import Parallel, delayed
 
 from cytomine import Cytomine
@@ -60,6 +61,20 @@ from cytomine.models import (
 )
 
 __author__ = "Rubens Ulysse <urubens@uliege.be>"
+
+
+class Models(str, Enum):
+    """Cytomine Model enumeration"""
+
+    DESCRIPTION = "description"
+    FILE = "attached-files"
+    IMAGE_INSTANCE = "imageinstance-collection"
+    ONTOLOGY = "ontology"
+    PROJECT = "project"
+    PROPERTY = "properties"
+    TERM = "term-collection"
+    USER_ANNOTATION = "user-annotation-collection"
+    USER = "user-collection"
 
 
 def find_first(l):
@@ -103,22 +118,42 @@ class Importer:
 
         self.super_admin = None
 
+        self.remote_users = []
+        self.remote_project = None
+        self.filenames = self._get_filenames()
+
+    def _get_filenames(self):
+        """Get the filenames of the JSON"""
+
+        filenames = [
+            filename
+            for filename in os.listdir(self.working_path)
+            if os.path.isfile(os.path.join(self.working_path, filename))
+        ]
+
+        mapping = {model: [] for model in Models}
+        for filename in filenames:
+            key = next(filter(filename.startswith, Models), None)
+            path = os.path.join(self.working_path, filename)
+
+            if key in [Models.DESCRIPTION, Models.FILE, Models.PROPERTY]:
+                mapping[key].append(path)
+            else:
+                mapping[key] = path
+
+        return mapping
+
     def run(self):
         self.super_admin = Cytomine.get_instance().current_user
         connect_as(self.super_admin, True)
 
         users = UserCollection().fetch()
-        users_json = [
-            f
-            for f in os.listdir(self.working_path)
-            if f.endswith(".json") and f.startswith("user-collection")
-        ][0]
-        remote_users = UserCollection()
-        with open(os.path.join(self.working_path, users_json), "r") as fp:
-            for user in json.load(fp):
-                remote_users.append(User().populate(user))
+        self.remote_users = UserCollection()
+        with open(self.filenames[Models.USER], "r", encoding="utf-8") as file:
+            for user in json.load(file):
+                self.remote_users.append(User().populate(user))
 
-        for remote_user in remote_users:
+        for remote_user in self.remote_users:
             user = find_first([u for u in users if u.username == remote_user.username])
             if not user:
                 user = copy.copy(remote_user)
@@ -139,26 +174,15 @@ class Importer:
         Otherwise, an ontology with an available name is created with new terms and corresponding relationships.
         """
         ontologies = OntologyCollection().fetch()
-        ontology_json = [
-            f
-            for f in os.listdir(self.working_path)
-            if f.endswith(".json") and f.startswith("ontology")
-        ][0]
-        remote_ontology = Ontology().populate(
-            json.load(open(os.path.join(self.working_path, ontology_json)))
-        )
+        with open(self.filenames[Models.ONTOLOGY], "r", encoding="utf-8") as file:
+            remote_ontology = Ontology().populate(json.load(file))
         remote_ontology.name = remote_ontology.name.strip()
 
         terms = TermCollection().fetch()
-        terms_json = [
-            f
-            for f in os.listdir(self.working_path)
-            if f.endswith(".json") and f.startswith("term-collection")
-        ]
         remote_terms = TermCollection()
-        if len(terms_json) > 0:
-            for t in json.load(open(os.path.join(self.working_path, terms_json[0]))):
-                remote_terms.append(Term().populate(t))
+        with open(self.filenames[Models.TERM], "r", encoding="utf-8") as file:
+            for term in json.load(file):
+                remote_terms.append(Term().populate(term))
 
         def ontology_exists():
             compatible_ontology = find_first(
@@ -242,15 +266,9 @@ class Importer:
         If a project with the same name already exists, append a (x) suffix where x is an increasing number.
         """
         projects = ProjectCollection().fetch()
-        project_json = [
-            f
-            for f in os.listdir(self.working_path)
-            if f.endswith(".json") and f.startswith("project")
-        ][0]
-        remote_project = Project().populate(
-            json.load(open(os.path.join(self.working_path, project_json)))
-        )
-        remote_project.name = remote_project.name.strip()
+        with open(self.filenames[Models.PROJECT], "r", encoding="utf-8") as file:
+            self.remote_project = Project().populate(json.load(file))
+        self.remote_project.name = self.remote_project.name.strip()
 
         def available_name():
             i = 1
@@ -261,37 +279,34 @@ class Importer:
                 i += 1
             return new_name
 
-        project = copy.copy(remote_project)
+        project = copy.copy(self.remote_project)
         project.id = None
         project.name = available_name()
         project.discipline = None
         project.ontology = self.id_mapping[project.ontology]
         project_contributors = [
-            u for u in remote_users if "project_contributor" in u.roles
+            u for u in self.remote_users if "project_contributor" in u.roles
         ]
         project.users = [self.id_mapping[u.id] for u in project_contributors]
-        project_managers = [u for u in remote_users if "project_manager" in u.roles]
+        project_managers = [
+            u for u in self.remote_users if "project_manager" in u.roles
+        ]
         project.admins = [self.id_mapping[u.id] for u in project_managers]
         if not self.with_original_date:
             project.created = None
             project.updated = None
         project.save()
-        self.id_mapping[remote_project.id] = project.id
+        self.id_mapping[self.remote_project.id] = project.id
         logging.info("Project imported: {}".format(project))
 
         # --------------------------------------------------------------------------------------------------------------
         logging.info("3/ Import images")
         storages = StorageCollection().fetch()
         abstract_images = AbstractImageCollection().fetch()
-        images_json = [
-            f
-            for f in os.listdir(self.working_path)
-            if f.endswith(".json") and f.startswith("imageinstance-collection")
-        ]
         remote_images = ImageInstanceCollection()
-        if len(images_json) > 0:
-            for i in json.load(open(os.path.join(self.working_path, images_json[0]))):
-                remote_images.append(ImageInstance().populate(i))
+        with open(self.filenames[Models.IMAGE_INSTANCE], "r", encoding="utf-8") as file:
+            for image in json.load(file):
+                remote_images.append(ImageInstance().populate(image))
 
         remote_images_dict = {}
 
@@ -336,7 +351,7 @@ class Importer:
                     "== Found corresponding abstract image. Linking to project."
                 )
                 ImageInstance(
-                    abstract_image.id, self.id_mapping[remote_project.id]
+                    abstract_image.id, self.id_mapping[self.remote_project.id]
                 ).save()
             else:
                 logging.info("== New image starting to upload & deploy")
@@ -349,7 +364,7 @@ class Importer:
                     self.host_upload,
                     filename,
                     storage.id,
-                    self.id_mapping[remote_project.id],
+                    self.id_mapping[self.remote_project.id],
                 )
                 time.sleep(0.8)
 
@@ -362,7 +377,7 @@ class Importer:
         count = 0
         while n_new_images != len(remote_images) and count < len(remote_images) * 5:
             new_images = ImageInstanceCollection().fetch_with_filter(
-                "project", self.id_mapping[remote_project.id]
+                "project", self.id_mapping[self.remote_project.id]
             )
             n_new_images = len(new_images)
             if count > 0:
@@ -406,15 +421,12 @@ class Importer:
 
         # --------------------------------------------------------------------------------------------------------------
         logging.info("4/ Import user annotations")
-        annots_json = [
-            f
-            for f in os.listdir(self.working_path)
-            if f.endswith(".json") and f.startswith("user-annotation-collection")
-        ]
         remote_annots = AnnotationCollection()
-        if len(annots_json) > 0:
-            for a in json.load(open(os.path.join(self.working_path, annots_json[0]))):
-                remote_annots.append(Annotation().populate(a))
+        with open(
+            self.filenames[Models.USER_ANNOTATION], "r", encoding="utf-8"
+        ) as file:
+            for annotation in json.load(file):
+                remote_annots.append(Annotation().populate(annotation))
 
         def _add_annotation(remote_annotation, id_mapping, with_original_date):
             if (
@@ -435,7 +447,9 @@ class Importer:
                 annotation.updated = None
             annotation.save()
 
-        for user in [u for u in remote_users if "userannotation_creator" in u.roles]:
+        for user in [
+            u for u in self.remote_users if "userannotation_creator" in u.roles
+        ]:
             remote_annots_for_user = [a for a in remote_annots if a.user == user.id]
             # SWITCH to annotation creator user
             connect_as(User().fetch(self.id_mapping[user.id]))
@@ -455,50 +469,33 @@ class Importer:
         obj.id = -1
         obj.class_ = ""
 
-        properties_json = [
-            f
-            for f in os.listdir(self.working_path)
-            if f.endswith(".json") and f.startswith("properties")
-        ]
-        for property_json in properties_json:
-            for remote_prop in json.load(
-                open(os.path.join(self.working_path, property_json))
-            ):
-                prop = Property(obj).populate(remote_prop)
-                prop.id = None
-                prop.domainIdent = self.id_mapping[prop.domainIdent]
-                prop.save()
+        for filename in self.filenames[Models.PROPERTY]:
+            with open(filename, "r", encoding="utf-8") as file:
+                for remote_property in json.load(file):
+                    prop = Property(obj).populate(remote_property)
+                    prop.id = None
+                    prop.domainIdent = self.id_mapping[prop.domainIdent]
+                    prop.save()
 
-        attached_files_json = [
-            f
-            for f in os.listdir(self.working_path)
-            if f.endswith(".json") and f.startswith("attached-files")
-        ]
-        for attached_file_json in attached_files_json:
-            for remote_af in json.load(
-                open(os.path.join(self.working_path, attached_file_json))
-            ):
-                af = AttachedFile(obj).populate(remote_af)
-                af.domainIdent = self.id_mapping[af.domainIdent]
-                af.filename = os.path.join(
-                    self.working_path, "attached_files", remote_af.get("filename")
-                )
-                af.save()
+        for filename in self.filenames[Models.FILE]:
+            with open(filename, "r", encoding="utf-8") as file:
+                for remote_af in json.load(file):
+                    af = AttachedFile(obj).populate(remote_af)
+                    af.id = None
+                    af.domainIdent = self.id_mapping[af.domainIdent]
+                    af.filename = os.path.join(
+                        self.working_path, "attached_files", remote_af.get("filename")
+                    )
+                    af.save()
 
-        descriptions_json = [
-            f
-            for f in os.listdir(self.working_path)
-            if f.endswith(".json") and f.startswith("description")
-        ]
-        for description_json in descriptions_json:
-            desc = Description(obj).populate(
-                json.load(open(os.path.join(self.working_path, description_json)))
-            )
-            desc.id = None
-            desc.domainIdent = self.id_mapping[desc.domainIdent]
-            desc._object.class_ = desc.domainClassName
-            desc._object.id = desc.domainIdent
-            desc.save()
+        for filename in self.filenames[Models.DESCRIPTION]:
+            with open(filename, "r", encoding="utf-8") as file:
+                desc = Description(obj).populate(json.load(file))
+                desc.id = None
+                desc.domainIdent = self.id_mapping[desc.domainIdent]
+                desc._object.class_ = desc.domainClassName
+                desc._object.id = desc.domainIdent
+                desc.save()
 
 
 if __name__ == "__main__":
