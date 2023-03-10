@@ -25,7 +25,6 @@ import json
 import logging
 import os
 import random
-import requests
 import shutil
 import string
 import sys
@@ -34,6 +33,8 @@ import time
 
 from argparse import ArgumentParser
 from enum import Enum
+
+import requests
 from joblib import Parallel, delayed
 
 from cytomine import Cytomine
@@ -78,14 +79,17 @@ class Models(str, Enum):
 
 
 def find_first(l):
+    """Find the first item in the list and return it"""
     return l[0] if len(l) > 0 else None
 
 
 def random_string(length=10):
+    """Generate a random string"""
     return "".join(random.choice(string.ascii_letters) for _ in range(length))
 
 
 def connect_as(user=None, open_admin_session=False):
+    """Connect to Cytomine with a user"""
     public_key = None
     private_key = None
 
@@ -106,6 +110,8 @@ def connect_as(user=None, open_admin_session=False):
 
 
 class Importer:
+    """Import a Cytomine Project archive to a Cytomine server"""
+
     def __init__(self, host_upload, working_path, with_original_date=False):
         self.host_upload = host_upload
         self.with_original_date = with_original_date
@@ -550,26 +556,24 @@ if __name__ == "__main__":
         if params.project_path.startswith("http://") or params.project_path.startswith(
             "https://"
         ):
-            logging.info("Downloading from {}".format(params.project_path))
+            logging.info("Downloading from %s", params.project_path)
             response = requests.get(
                 params.project_path, allow_redirects=True, stream=True
             )
             params.project_path = params.project_path[
                 params.project_path.rfind("/") + 1 :
             ]
-            with open(params.project_path, "wb") as f:
+            with open(params.project_path, "wb", encoding="utf-8") as f:
                 shutil.copyfileobj(response.raw, f)
                 logging.info("Downloaded successfully.")
 
         if params.project_path.endswith(".tar.gz"):
-            tar = tarfile.open(params.project_path, "r:gz")
-            tar.extractall(os.path.dirname(params.project_path))
-            tar.close()
+            with tarfile.open(params.project_path, "r:gz", encoding="utf-8") as tar:
+                tar.extractall(os.path.dirname(params.project_path))
             params.project_path = params.project_path[:-7]
         elif params.project_path.endswith(".tar"):
-            tar = tarfile.open(params.project_path, "r:")
-            tar.extractall(os.path.dirname(params.project_path))
-            tar.close()
+            with tarfile.open(params.project_path, "r:", encoding="utf-8") as tar:
+                tar.extractall(os.path.dirname(params.project_path))
             params.project_path = params.project_path[:-4]
 
         importer = Importer(params.host_upload, params.project_path, **options)
