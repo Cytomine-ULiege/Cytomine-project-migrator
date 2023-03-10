@@ -1,18 +1,19 @@
-# -*- coding: utf-8 -*-
+"""Cytomine Project Exporter
 
-# * Copyright (c) 2009-2021. Authors: see NOTICE file.
-# *
-# * Licensed under the Apache License, Version 2.0 (the "License");
-# * you may not use this file except in compliance with the License.
-# * You may obtain a copy of the License at
-# *
-# *      http://www.apache.org/licenses/LICENSE-2.0
-# *
-# * Unless required by applicable law or agreed to in writing, software
-# * distributed under the License is distributed on an "AS IS" BASIS,
-# * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# * See the License for the specific language governing permissions and
-# * limitations under the License.
+    Copyright (c) 2009-2023. Authors: see NOTICE file.
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+"""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -25,15 +26,25 @@ import shutil
 import sys
 from argparse import ArgumentParser
 from datetime import datetime
+from joblib import Parallel, delayed
 
 from cytomine import Cytomine
 from cytomine.models import (
-    AnnotationCollection, AttachedFileCollection, Collection, Description,
-    ImageInstanceCollection, ImageGroupCollection,
-    ImageGroupImageInstanceCollection, Model, Ontology, Project,
-    PropertyCollection, TermCollection, User, UserCollection
+    AnnotationCollection,
+    AttachedFileCollection,
+    Collection,
+    Description,
+    ImageGroupCollection,
+    ImageGroupImageInstanceCollection,
+    ImageInstanceCollection,
+    Model,
+    Ontology,
+    Project,
+    PropertyCollection,
+    TermCollection,
+    User,
+    UserCollection,
 )
-from joblib import Parallel, delayed
 
 __author__ = "Rubens Ulysse <urubens@uliege.be>"
 
@@ -48,15 +59,30 @@ def find_or_append_by_id(obj, l):
 
 
 class Exporter:
-    def __init__(self, working_path, id_project, without_image_download=False, without_image_groups=False,
-                 without_user_annotations=False, without_metadata=False, without_annotation_metadata=False,
-                 anonymize=False):
+    def __init__(
+        self,
+        working_path,
+        id_project,
+        without_image_download=False,
+        without_image_groups=False,
+        without_user_annotations=False,
+        without_metadata=False,
+        without_annotation_metadata=False,
+        anonymize=False,
+    ):
         self.project = Project().fetch(id_project)
         if not self.project:
             raise ValueError("Project not found")
 
-        items = [Cytomine.get_instance().host, self.project.id, self.project.name, datetime.now()]
-        self.project_directory = "{}-{}-{}-{}".format(*[str(item).replace(" ", "-") for item in items])
+        items = [
+            Cytomine.get_instance().host,
+            self.project.id,
+            self.project.name,
+            datetime.now(),
+        ]
+        self.project_directory = "{}-{}-{}-{}".format(
+            *[str(item).replace(" ", "-") for item in items]
+        )
         self.working_path = working_path
         self.project_path = os.path.join(working_path, self.project_directory)
         self.attached_file_path = None
@@ -83,7 +109,9 @@ class Exporter:
         self.save_object(self.project)
 
         logging.info("1.1/ Export project managers")
-        admins = UserCollection(admin=True).fetch_with_filter("project", self.project.id)
+        admins = UserCollection(admin=True).fetch_with_filter(
+            "project", self.project.id
+        )
         for admin in admins:
             self.save_user(admin, "project_manager")
 
@@ -129,10 +157,16 @@ class Exporter:
 
             def _download_image(image, path):
                 logging.info("Download file for image {}".format(image))
-                image.download(os.path.join(path, image.originalFilename), override=False, parent=True)
+                image.download(
+                    os.path.join(path, image.originalFilename),
+                    override=False,
+                    parent=True,
+                )
 
             # Temporary use threading as backend, as we need to connect to Cytomine in every other processes.
-            Parallel(n_jobs=-1, backend="threading")(delayed(_download_image)(image, image_path) for image in images)
+            Parallel(n_jobs=-1, backend="threading")(
+                delayed(_download_image)(image, image_path) for image in images
+            )
 
         logging.info("4.1/ Export image creator users")
         image_users = set([image.user for image in images])
@@ -152,7 +186,9 @@ class Exporter:
 
         # --------------------------------------------------------------------------------------------------------------
         logging.info("4/ Export user annotations")
-        user_annotations = AnnotationCollection(showWKT=True, showTerm=True, project=self.project.id).fetch()
+        user_annotations = AnnotationCollection(
+            showWKT=True, showTerm=True, project=self.project.id
+        ).fetch()
         self.save_object(user_annotations, filename="user-annotation-collection")
 
         logging.info("4.1/ Export user annotation creator users")
@@ -164,9 +200,13 @@ class Exporter:
         logging.info("4.2/ Export user annotation term creator users")
         annotation_users = set()
         for annotation in user_annotations:
-            annotation_users = annotation_users.union(*[
-                set(item['user']) for item in annotation.userByTerm if annotation.userByTerm
-            ])
+            annotation_users = annotation_users.union(
+                *[
+                    set(item["user"])
+                    for item in annotation.userByTerm
+                    if annotation.userByTerm
+                ]
+            )
 
         for annotation_user in annotation_users:
             user = User().fetch(annotation_user)
@@ -195,7 +235,9 @@ class Exporter:
         # --------------------------------------------------------------------------------------------------------------
         if self.with_image_groups:
             logging.info("6/ Export image groups")
-            image_groups = ImageGroupCollection().fetch_with_filter("project", self.project.id)
+            image_groups = ImageGroupCollection().fetch_with_filter(
+                "project", self.project.id
+            )
             self.save_object(image_groups)
 
             if self.with_metadata:
@@ -206,11 +248,19 @@ class Exporter:
                 image_group_path = os.path.join(self.project_path, "imagegroups")
                 os.makedirs(image_group_path)
                 for image_group in image_groups:
-                    image_group.download(os.path.join(image_group_path, image_group.name), override=False, parent=True)
+                    image_group.download(
+                        os.path.join(image_group_path, image_group.name),
+                        override=False,
+                        parent=True,
+                    )
 
             image_sequences = ImageGroupImageInstanceCollection()
             for image_group in image_groups:
-                image_sequences += ImageGroupImageInstanceCollection().fetch_with_filter("imagegroup", image_group.id)
+                image_sequences += (
+                    ImageGroupImageInstanceCollection().fetch_with_filter(
+                        "imagegroup", image_group.id
+                    )
+                )
             self.save_object(image_sequences)
 
         # --------------------------------------------------------------------------------------------------------------
@@ -220,25 +270,32 @@ class Exporter:
         def _export_metadata(save_object_fn, obj, attached_file_path):
             properties = PropertyCollection(obj).fetch()
             if len(properties) > 0:
-                save_object_fn(properties, "properties-object-{}-collection".format(obj.id))
+                save_object_fn(
+                    properties, "properties-object-{}-collection".format(obj.id)
+                )
 
             attached_files = AttachedFileCollection(obj).fetch()
             if len(attached_files) > 0:
-                save_object_fn(attached_files, "attached-files-object-{}-collection".format(obj.id))
+                save_object_fn(
+                    attached_files, "attached-files-object-{}-collection".format(obj.id)
+                )
                 for attached_file in attached_files:
-                    attached_file.download(os.path.join(attached_file_path, "{filename}"), True)
+                    attached_file.download(
+                        os.path.join(attached_file_path, "{filename}"), True
+                    )
 
             description = Description(obj).fetch()
             if description:
                 save_object_fn(description, "description-object-{}".format(obj.id))
 
         Parallel(n_jobs=-1, backend="threading")(
-            delayed(_export_metadata)(self.save_object, obj, self.attached_file_path) for obj in objects
+            delayed(_export_metadata)(self.save_object, obj, self.attached_file_path)
+            for obj in objects
         )
 
     def save_user(self, user, role=None):
         u = find_or_append_by_id(user, self.users)
-        if not hasattr(u, 'roles'):
+        if not hasattr(u, "roles"):
             u.roles = []
         if role:
             u.roles.append(role)
@@ -254,38 +311,77 @@ class Exporter:
         elif isinstance(obj, Collection):
             filename = "{}-collection.json".format(obj.callback_identifier)
 
-        with open(os.path.join(self.project_path, filename), 'w') as outfile:
+        with open(os.path.join(self.project_path, filename), "w") as outfile:
             outfile.write(obj.to_json())
             logging.info("Object {} has been saved locally.".format(obj))
 
     def make_archive(self):
         logging.info("Making archive...")
-        shutil.make_archive(self.project_path, "gztar", self.working_path, self.project_directory)
+        shutil.make_archive(
+            self.project_path, "gztar", self.working_path, self.project_directory
+        )
         logging.info("Finished.")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = ArgumentParser(prog="Cytomine Project Exporter")
-    parser.add_argument('--host', help="The Cytomine host from which project is exported.")
-    parser.add_argument('--public_key', help="The Cytomine public key used to export the project. "
-                                             "The underlying user has to be a manager of the exported project.")
-    parser.add_argument('--private_key', help="The Cytomine private key used to export the project. "
-                                              "The underlying user has to be a manager of the exported project.")
-    parser.add_argument('--id_project', help="The Cytomine identifier of the project to export.")
-    parser.add_argument('--make_archive', default=True, help="Make an archive for the exported project.")
-    parser.add_argument('--working_path', default="", help="The base path where the generated archive will be stored.")
-    parser.add_argument('--anonymize', default=False, help="Anonymize users in the project.")
-    parser.add_argument('--without_image_download', default=False, help="Do not download images but export image metadata.")
-    parser.add_argument('--without_image_groups', default=False, help="Do not export image groups.")
-    parser.add_argument('--without_user_annotations', default=False, help="Do not export user annotations.")
-    parser.add_argument('--without_metadata', default=False, help="Do not export any metadata.")
-    parser.add_argument('--without_annotation_metadata', default=True, help="Do not export annotation metadata "
-                                                                            "(speed up processing).")
+    parser.add_argument(
+        "--host", help="The Cytomine host from which project is exported."
+    )
+    parser.add_argument(
+        "--public_key",
+        help="The Cytomine public key used to export the project. "
+        "The underlying user has to be a manager of the exported project.",
+    )
+    parser.add_argument(
+        "--private_key",
+        help="The Cytomine private key used to export the project. "
+        "The underlying user has to be a manager of the exported project.",
+    )
+    parser.add_argument(
+        "--id_project", help="The Cytomine identifier of the project to export."
+    )
+    parser.add_argument(
+        "--make_archive", default=True, help="Make an archive for the exported project."
+    )
+    parser.add_argument(
+        "--working_path",
+        default="",
+        help="The base path where the generated archive will be stored.",
+    )
+    parser.add_argument(
+        "--anonymize", default=False, help="Anonymize users in the project."
+    )
+    parser.add_argument(
+        "--without_image_download",
+        default=False,
+        help="Do not download images but export image metadata.",
+    )
+    parser.add_argument(
+        "--without_image_groups", default=False, help="Do not export image groups."
+    )
+    parser.add_argument(
+        "--without_user_annotations",
+        default=False,
+        help="Do not export user annotations.",
+    )
+    parser.add_argument(
+        "--without_metadata", default=False, help="Do not export any metadata."
+    )
+    parser.add_argument(
+        "--without_annotation_metadata",
+        default=True,
+        help="Do not export annotation metadata " "(speed up processing).",
+    )
     params, other = parser.parse_known_args(sys.argv[1:])
 
     with Cytomine(params.host, params.public_key, params.private_key) as _:
         Cytomine.get_instance().open_admin_session()
-        options = {k: v for (k, v) in vars(params).items() if k.startswith('without') or k == 'anonymize'}
+        options = {
+            k: v
+            for (k, v) in vars(params).items()
+            if k.startswith("without") or k == "anonymize"
+        }
         exporter = Exporter(params.working_path, params.id_project, **options)
         exporter.run()
         if params.make_archive:
