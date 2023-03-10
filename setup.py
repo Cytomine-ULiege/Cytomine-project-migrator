@@ -44,6 +44,8 @@ setup(
     long_description_content_type="text/markdown",
     author=about["__author__"],
     author_email=about["__author_email__"],
+    maintainer=about["__maintainer__"],
+    maintainer_email=about["__maintainer_email__"],
     url=["__url__"],
     packages=find_packages(),
     classifiers=[
